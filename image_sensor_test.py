@@ -230,7 +230,7 @@ sys_bit_div_0305 = {"0x0": 4, "0x1": 5}
 pll_pclk_div_3020 = {"0x0": 1, "0x1": 2}
 sys_clk_div_3106 = {"0x0": 1, "0x1": 2, "0x2": 4, "0x3": 8}
 
-def calculate_clock_values():
+def pll1_values():
 
 
 	#reg_vals = [0x00, 0x01, 0x00, 0x32, 0x00, 0x00, 0x01, 0x9b, 0x15]
@@ -265,6 +265,170 @@ def calculate_clock_values():
 	print("SCLK: ", sclk)
 	
 	return 
+
+
+
+prediv0_reg = {"reg": 0x0307, "bit_shift": 4, "bit_mask": 0x1, "values": {"0x0": 1, "0x1": 2}}
+prediv_reg = {"reg": 0x030B, "bit_shift": 0, "bit_mask": 0x3, "values": {"0x0": 1, "0x1": 1.5, "0x2": 2, "0x3": 2.5, "0x4": 3, "0x5": 4, "0x6": 6, "0x7": 8}}
+sa1_div_reg =  {"reg": 0x030f, "bit_shift": 0, "bit_mask": 0x3, "values": {"0x0": 5, "0x1": 6, "0x2": 7, "0x3": 8}}
+dac_div_reg = {"reg": 0x0312, "bit_shift": 0, "bit_mask": 0x3, "values": {"0x0": 1, "0x1": 2, "0x2": 3, "0x3": 4}}
+sram_div_reg =  {"reg": 0x030E, "bit_shift": 0, "bit_mask": 0x7, "values": {"0x0": 0, "0x1": 1, "0x2": 2, "0x3": 3, "0x4": 4, "0x5": 5, "0x6": 6, "0x7": 7}}
+div_reg = {"reg": 0x3664, "bit_shift": 3, "bit_mask": 0x1, "values": {"0x0": 1, "0x1": 2}}
+
+multiplier_upper_reg = {"reg": 0x030C, "bit_shift": 8, "bit_mask": 0x03}
+multiplier_lower_reg = {"reg": 0x030D, "bit_shift": 0, "bit_mask": 0xff}
+
+def pll2_values():
+	prediv0 = prediv0_reg["values"][hex(((read_i2c(prediv0_reg["reg"]) >> prediv0_reg["bit_shift"]) & prediv0_reg["bit_mask"]))]
+	prediv = prediv_reg["values"][hex(((read_i2c(prediv_reg["reg"]) >> prediv_reg["bit_shift"]) & prediv_reg["bit_mask"]))]
+	sa1_div = sa1_div_reg["values"][hex(((read_i2c(sa1_div_reg["reg"]) >> sa1_div_reg["bit_shift"]) & sa1_div_reg["bit_mask"]))]
+	dac_div = dac_div_reg["values"][hex(((read_i2c(dac_div_reg["reg"]) >> dac_div_reg["bit_shift"]) & dac_div_reg["bit_mask"]))]
+	sram_div = sram_div_reg["values"][hex(((read_i2c(sram_div_reg["reg"]) >> sram_div_reg["bit_shift"]) & sram_div_reg["bit_mask"]))]
+	div = div_reg["values"][hex(((read_i2c(div_reg["reg"]) >> div_reg["bit_shift"]) & div_reg["bit_mask"]))]
+
+	multiplier = ((read_i2c(multiplier_upper_reg["reg"]) & multiplier_upper_reg["bit_mask"]) << multiplier_upper_reg["bit_shift"]) | ((read_i2c(multiplier_lower_reg["reg"]) & multiplier_lower_reg["bit_mask"]) << multiplier_lower_reg["bit_shift"])
+
+	reg_val = ((read_i2c(0x3661) >> 6) & 0x2) | ((read_i2c(0x3665) >> 3) & 0x1)
+	if (reg_val == 0x0) or (reg_val == 0x1):
+		sal_div = 1
+	elif reg_val == 0x2:
+		sal_div = 2
+	elif reg_val == 0x3:
+		sal_div = 4
+
+	sal_clk = (ref_clock * multiplier) / (prediv0 * prediv * sa1_div * sal_div)
+
+	dac_clk = (ref_clock * multiplier) / (prediv0 * prediv * dac_div)
+
+	sram_clk = (ref_clock * multiplier) / (prediv0 * prediv * sram_div * div)
+
+	print("SAL CLK: {} MHz".format(sal_clk/1E6))
+	print("DAC CLK: {} MHz".format(dac_clk/1E6))
+	print("SRAM CLK: {} MHz".format(sram_clk/1E6))
+
+
+x_addr_start_regs = [0x3800, 0x3801]
+y_addr_start_regs = [0x3802, 0x3803]
+
+x_addr_end_regs = [0x3804, 0x3805]
+y_addr_end_regs = [0x3806, 0x3807]
+
+x_output_size_regs = [0x3808, 0x3809]
+y_output_size_regs = [0x380A, 0x380B]
+
+hts_regs = [0x380C, 0x380D]
+vts_regs = [0x380E, 0x380F]
+
+x_inc_odd_reg = 0x3814
+x_inc_even_reg = 0x3815
+y_inc_odd_reg = 0x3816
+y_inc_even_reg = 0x3817
+
+isp_x_win_off_regs = [0x3810, 0x3811]
+isp_y_win_off_regs = [0x3812, 0x3813]
+
+vsync_start_regs = [0x3818, 0x3819]
+vsync_end_regs = [0x381A, 0x381B]
+
+def get_output_settings():
+
+	#X ADDR START
+	x_addr_start = (read_i2c(x_addr_start_regs[0]) << 8) + read_i2c(x_addr_start_regs[1])
+	print("X ADDR START: ", x_addr_start)
+
+	#Y ADDR START
+	y_addr_start = (read_i2c(y_addr_start_regs[0]) << 8) + read_i2c(y_addr_start_regs[1])
+	print("Y ADDR START: ", y_addr_start)
+
+	#X ADDR END
+	x_addr_end = (read_i2c(x_addr_end_regs[0]) << 8) + read_i2c(x_addr_end_regs[1])
+	print("X ADDR END: ", x_addr_end)
+
+	#y ADDR END
+	y_addr_end = (read_i2c(y_addr_end_regs[0]) << 8) + read_i2c(y_addr_end_regs[1])
+	print("Y ADDR END: ", x_addr_end)
+
+	#X_OUTPUT_SIZE
+	x_output_size = (read_i2c(x_output_size_regs[0]) << 8) + read_i2c(x_output_size_regs[1])
+	print("X OUTPUT SIZE: ", x_output_size)
+
+	#Y_OUTPUT_SIZE
+	y_output_size = (read_i2c(y_output_size_regs[0]) << 8) + read_i2c(y_output_size_regs[1])
+	print("Y OUTPUT SIZE: ", y_output_size)
+
+	#HTS
+	hts = (read_i2c(hts_regs[0]) << 8) + read_i2c(hts_regs[1])
+	print("HTS: ", hts)
+	#VTS
+	vts = (read_i2c(vts_regs[0]) << 8) + read_i2c(vts_regs[1])
+	print("VTS: ", vts)
+
+	x_inc_odd = read_i2c(x_inc_odd_reg) & 0x0f
+	print("X INC ODD: ", x_inc_odd)
+	x_inc_even = read_i2c(x_inc_even_reg) & 0x0f
+	print("X INC EVEN: ", x_inc_even)
+	y_inc_odd = read_i2c(y_inc_odd_reg) & 0x0f
+	print("Y INC ODD: ", y_inc_odd)
+	y_inc_even = read_i2c(y_inc_even_reg) & 0x0f
+	print("Y INC EVEN: ", y_inc_even)
+
+	#ISP X WIN OFFSET
+	isp_x_win_off = (read_i2c(isp_x_win_off_regs[0]) << 8) + read_i2c(isp_x_win_off_regs[1])
+	print("ISP X WIN OFF: ", isp_x_win_off)
+	#ISP Y WIN OFFSET
+	isp_y_win_off = (read_i2c(isp_y_win_off_regs[0]) << 8) + read_i2c(isp_y_win_off_regs[1])
+	print("ISP Y WIN OFF: ", isp_y_win_off)
+
+	#VSYNC START
+	vsync_start = (read_i2c(vsync_start_regs[0]) << 8) + read_i2c(vsync_start_regs[1])
+	print("VSYNC START: ", vsync_start)
+
+	#VSYNC END
+	vsync_end = (read_i2c(vsync_end_regs[0]) << 8) + read_i2c(vsync_end_regs[1])
+	print("VSYNC END: ", vsync_end)
+
+def set_res_value(input_string, input_val):
+	if input_string == "hts":
+		regs=hts_regs
+	elif input_string == "vts":
+		regs=vts_regs
+	elif input_string == "x_output_size":
+		regs=x_output_size_regs
+	elif input_string == "y_output_size":
+		regs=y_output_size_regs		
+
+	input_val = int(input_val,10)
+	if input_val > 0xffff:
+		print("Error:  {} is greater than 16-bits!", input_string)
+		return
+	if (input_val < 0):
+		print("Error:  {} is less than 0!".format(input_string))
+		return
+
+	#Set the HTS
+	for i in range(len(regs)):
+		write_i2c(regs[i], (input_val >> ((len(regs) - i -1) * 8))& 0xff)
+		
+	#HTS
+	val = (read_i2c(regs[0]) << 8) + read_i2c(regs[1])
+	print("{}: {}".format( input_string, val))
+
+def set_vts(hts):
+	vts = int(vts,10)
+	if vts > 0xffff:
+		print("Error:  HTS is greater than 16-bits!")
+		return
+	if (vts < 0):
+		print("Error:  HTS is less than 0!")
+		return
+
+	#Set the HTS
+	for i in range(len(hts_regs)):
+		write_i2c(hts_regs[i], (hts >> ((len(hts_regs) - i -1) * 8))& 0xff)
+		
+	#HTS
+	hts = (read_i2c(hts_regs[0]) << 8) + read_i2c(hts_regs[1])
+	print("HTS: ", hts)
 
 _fns = globals().copy()
 for k, v in list(_fns.items()):
