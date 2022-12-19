@@ -166,6 +166,19 @@ def standby_enter():
 def standby_exit():
 	write_i2c(standby_reg, 0x01)
 
+def standby_test(wait_time):
+	wait_time = float(wait_time)
+
+	print("Entering standby...")
+	standby_enter()
+
+	print("Sleeping for {} ms".format(wait_time * 1000))
+	time.sleep(wait_time)
+
+	print("Exiting standby...")
+	standby_exit()
+
+
 
 def enable_binning(hbin,vbin):
 	reg_val = 0x0
@@ -260,11 +273,71 @@ def pll1_values():
 	mipi_pclk = (ref_clock * multiplier) / (prediv0_div * prediv_div * mipi_div * pix_bit_div * pll_pclk_div)
 	sclk = (ref_clock * multiplier) / (prediv0_div * prediv_div * mipi_div * sys_bit_div* sys_clk_div)
 
-	print("MIPI PHY CLOCK: ", mipi_phy_clock)
-	print("MIPI PIXEL CLOCK: ", mipi_pclk)
-	print("SCLK: ", sclk)
+	print("MIPI PHY CLOCK: {} MHz".format(mipi_phy_clock / 1E6))
+	print("MIPI PIXEL CLOCK: {} MHz".format(mipi_pclk/1E6))
+	print("SCLK: {} MHz".format(sclk/1E6))
 	
 	return 
+
+def set_pll1_multiplier(input_val):
+
+	input_val = int(input_val,10)
+
+	print("Old PLL1 values: ")
+	pll1_values()
+
+	standby_enter()
+
+	write_i2c(pll1_reg_array[2], ((input_val >> 8) & 0x3)) 
+
+	write_i2c(pll1_reg_array[3], (input_val & 0xff))
+
+	standby_exit()	
+
+	print("Updated PLL1 values: ")
+	pll1_values()	
+
+def set_pll1_mipi_div(input_val):
+
+	input_val = int(input_val,10)
+
+	print("Old PLL1 values: ")
+	pll1_values()
+
+	standby_enter()
+
+	write_i2c(0x303, (input_val & 0x3))
+
+	standby_exit()	
+
+	print("Updated PLL1 values: ")
+	pll1_values()	
+
+
+
+def set_pll1_pclk_div(input_val):
+
+	input_val = int(input_val,10)
+
+	print("Old PLL1 values: ")
+	pll1_values()
+
+	standby_enter()
+
+	reg_val = read_i2c(0x3020) & 0xF7
+
+	print(hex(reg_val))
+
+	reg_val = reg_val | ((input_val & 0x1) << 3) 
+
+	print(hex(reg_val))
+	write_i2c(0x3020, reg_val)
+
+	standby_exit()	
+
+	print("Updated PLL1 values: ")
+	pll1_values()	
+
 
 
 
