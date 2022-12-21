@@ -40,13 +40,26 @@ def read_i2c(register):
 	return int(ret_str.replace("\n",""), 16)
 
 def get_exposure():
-	print("Get exposure")
 	exposure_val=0
-	for i in range(len(exp_reg_array)):
-		exposure_val = exposure_val + (int(read_i2c(exp_reg_array[i])) << 8*i)
-	#print(exposure_val)
+
+	print("{}: {}".format( hex(exp_reg_array[0]), hex(read_i2c(exp_reg_array[0]))))
+	print("{}: {}".format( hex(exp_reg_array[1]), hex(read_i2c(exp_reg_array[1]))))
+	print("{}: {}".format( hex(exp_reg_array[2]), hex(read_i2c(exp_reg_array[2]))))
+
+	exposure_val = (read_i2c(exp_reg_array[0]) & 0x7) << 12
+	exposure_val = exposure_val | ((read_i2c(exp_reg_array[1]) & 0xff) << 4)
+	exposure_val = exposure_val | ((read_i2c(exp_reg_array[2]) & 0xf0) >> 4)
+	
+
+
+	print(exposure_val)
 
 def set_exposure(exp_input):
+
+	exp_input=int(exp_input,16)
+
+	print("Old Exposure: ")
+	get_exposure()
 
 	print("Set exposure")
 	exp_val=[0x0, 0x0, 0x0]
@@ -56,6 +69,9 @@ def set_exposure(exp_input):
 
 	for i in range(len(exp_reg_array)):
 		write_i2c(exp_reg_array[i], exp_val[i])
+
+	print("New Exposure: ")
+	get_exposure()
 
 def exposure_test():
 	for i in range(0,0xA000,0x1000):
@@ -273,6 +289,15 @@ def pll1_values():
 	mipi_pclk = (ref_clock * multiplier) / (prediv0_div * prediv_div * mipi_div * pix_bit_div * pll_pclk_div)
 	sclk = (ref_clock * multiplier) / (prediv0_div * prediv_div * mipi_div * sys_bit_div* sys_clk_div)
 
+	print("prediv0_div: {}".format(prediv0_div))
+	print("prediv_div: {}".format(prediv_div))
+	print("Multiplier:  {}".format(multiplier))
+	print("Mipi Div:  {}".format(mipi_div))
+	print("Pix Bit Div:  {}".format(pix_bit_div))
+	print("Sys Bit Div:  {}".format(sys_bit_div))
+	print("PLL PCLK Div:  {}".format(pll_pclk_div))
+	print("Sys Clk Div:  {}".format(sys_clk_div))
+
 	print("MIPI PHY CLOCK: {} MHz".format(mipi_phy_clock / 1E6))
 	print("MIPI PIXEL CLOCK: {} MHz".format(mipi_pclk/1E6))
 	print("SCLK: {} MHz".format(sclk/1E6))
@@ -339,7 +364,23 @@ def set_pll1_pclk_div(input_val):
 	pll1_values()	
 
 
+def get_pclk_period():
+	print("{}: {}".format(hex(0x4837), hex(read_i2c(0x4837))))
 
+def set_pclk_period(input_val):
+	input_val = int(input_val, 10)
+
+	print("Old: ")
+	get_pclk_period()
+
+	standby_enter()
+
+	write_i2c(0x4837, input_val & 0xff)
+
+	standby_exit()
+
+	print("After: ")
+	get_pclk_period()
 
 prediv0_reg = {"reg": 0x0307, "bit_shift": 4, "bit_mask": 0x1, "values": {"0x0": 1, "0x1": 2}}
 prediv_reg = {"reg": 0x030B, "bit_shift": 0, "bit_mask": 0x3, "values": {"0x0": 1, "0x1": 1.5, "0x2": 2, "0x3": 2.5, "0x4": 3, "0x5": 4, "0x6": 6, "0x7": 8}}
@@ -360,7 +401,9 @@ def pll2_values():
 	div = div_reg["values"][hex(((read_i2c(div_reg["reg"]) >> div_reg["bit_shift"]) & div_reg["bit_mask"]))]
 
 	multiplier = ((read_i2c(multiplier_upper_reg["reg"]) & multiplier_upper_reg["bit_mask"]) << multiplier_upper_reg["bit_shift"]) | ((read_i2c(multiplier_lower_reg["reg"]) & multiplier_lower_reg["bit_mask"]) << multiplier_lower_reg["bit_shift"])
-
+	print("{}: {}".format(hex(multiplier_upper_reg["reg"]), hex(read_i2c(multiplier_upper_reg["reg"]))))
+	print("{}: {}".format(hex(multiplier_lower_reg["reg"]), hex(read_i2c(multiplier_lower_reg["reg"]))))
+	
 	reg_val = ((read_i2c(0x3661) >> 6) & 0x2) | ((read_i2c(0x3665) >> 3) & 0x1)
 	if (reg_val == 0x0) or (reg_val == 0x1):
 		sal_div = 1
@@ -378,6 +421,25 @@ def pll2_values():
 	print("SAL CLK: {} MHz".format(sal_clk/1E6))
 	print("DAC CLK: {} MHz".format(dac_clk/1E6))
 	print("SRAM CLK: {} MHz".format(sram_clk/1E6))
+
+
+def set_pll2_multiplier(input_val):
+
+	input_val = int(input_val,10)
+
+	print("Old PLL2 values: ")
+	pll2_values()
+
+	standby_enter()
+
+	write_i2c(multiplier_upper_reg["reg"], ((input_val >> 8) & 0x3)) 
+
+	write_i2c(multiplier_lower_reg["reg"], (input_val & 0xff))
+
+	standby_exit()	
+
+	print("Updated PLL2 values: ")
+	pll2_values()	
 
 
 x_addr_start_regs = [0x3800, 0x3801]
@@ -485,23 +547,6 @@ def set_res_value(input_string, input_val):
 	#HTS
 	val = (read_i2c(regs[0]) << 8) + read_i2c(regs[1])
 	print("{}: {}".format( input_string, val))
-
-def set_vts(hts):
-	vts = int(vts,10)
-	if vts > 0xffff:
-		print("Error:  HTS is greater than 16-bits!")
-		return
-	if (vts < 0):
-		print("Error:  HTS is less than 0!")
-		return
-
-	#Set the HTS
-	for i in range(len(hts_regs)):
-		write_i2c(hts_regs[i], (hts >> ((len(hts_regs) - i -1) * 8))& 0xff)
-		
-	#HTS
-	hts = (read_i2c(hts_regs[0]) << 8) + read_i2c(hts_regs[1])
-	print("HTS: ", hts)
 
 _fns = globals().copy()
 for k, v in list(_fns.items()):
