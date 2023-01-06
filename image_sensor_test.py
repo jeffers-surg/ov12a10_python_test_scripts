@@ -56,7 +56,10 @@ def get_exposure():
 
 def set_exposure(exp_input):
 
-	exp_input=int(exp_input,16)
+	print(type(exp_input))
+
+	#exp_input=int(exp_input,16)
+	#exp_input=exp_input
 
 	print("Old Exposure: ")
 	get_exposure()
@@ -94,6 +97,10 @@ def exposure_test():
 		#group_hold_quick_launch()
 
 		time.sleep(2)
+		cmd_str = "ffmpeg -y -i tcp://127.0.0.1:5558 -f image2 -vframes 1 ./exposure_test/exposure_test_{}_lines.png".format(i)
+
+		os.system(cmd_str)
+		
 
 		get_exposure()
 
@@ -522,6 +529,11 @@ def get_output_settings():
 	vsync_end = (read_i2c(vsync_end_regs[0]) << 8) + read_i2c(vsync_end_regs[1])
 	print("VSYNC END: ", vsync_end)
 
+
+	#BINNING settings
+	print("Horizontal Binning: {}".format(read_i2c((0x3820) >> 1) & 0x1))
+	print("Vertical Binning: {}".format(read_i2c(0x3820) & 0x1))
+
 def set_res_value(input_string, input_val):
 	if input_string == "hts":
 		regs=hts_regs
@@ -547,6 +559,64 @@ def set_res_value(input_string, input_val):
 	#HTS
 	val = (read_i2c(regs[0]) << 8) + read_i2c(regs[1])
 	print("{}: {}".format( input_string, val))
+
+blc_ctrl_reg = 0x4001
+lenc_ctrl_reg = 0x5000
+dpc_ctrl_reg = 0x5001
+
+def get_isp_status():
+	#Get the Black level correction status
+	val = read_i2c(blc_ctrl_reg) & 0x1
+	if (val == 1):
+		status = "Enabled"
+	else:
+		status = "Disabled"
+
+	print("Black level calibration status: {}".format(status))
+
+	#Get the lens correction status
+	val = (read_i2c(lenc_ctrl_reg) >> 2) & 0x1
+
+	if (val == 1):
+		status = "Enabled"
+	else:
+		status = "Disabled"
+
+	print("Lens Correction status: {}".format(status))
+
+	#Get the defective pixel cancellation status
+	val = (read_i2c(dpc_ctrl_reg) >> 1) & 0x1
+
+	if (val == 1):
+		status = "Enabled"
+	else:
+		status = "Disabled"
+
+	print("Defective Pixel Cancellation status: {}".format(status))
+
+def set_isp_status(isp_feature, status):
+
+	status = int(status) & 0x1
+
+	if (status != 0) and (status != 1):
+		print("Error:  Status must be 0 or 1!")
+		return
+
+	print("ISP Status before: ")
+	get_isp_status()
+
+	if (isp_feature == "blc"):
+		reg_val = read_i2c(blc_ctrl_reg)
+		write_i2c(blc_ctrl_reg, (reg_val & 0xFE) | status)
+	elif (isp_feature == "lenc"):
+		reg_val = (read_i2c(lenc_ctrl_reg) >> 2) & 0x1
+		write_i2c(lenc_ctrl_reg, (reg_val & 0xFB) | (status << 2))
+	elif (isp_feature == "dpc"):
+		reg_val = (read_i2c(dpc_ctrl_reg) >> 1) & 0x1
+		write_i2c(dpc_ctrl_reg, (reg_val & 0xFD) | (status << 1))
+
+	print("ISP Status before: ")
+	get_isp_status()
 
 _fns = globals().copy()
 for k, v in list(_fns.items()):
